@@ -1,18 +1,36 @@
 # ☀️ Taiwan Weather & Alert Dashboard (全台 22 縣市即時天氣與警特報)
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.64.0-ff4b4b.svg)](https://streamlit.io/)
+[![Vercel](https://img.shields.io/badge/Deploy%20on-Vercel-black.svg?logo=vercel)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjohnny051777%2FIoTclass_HW1)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.30.0-ff4b4b.svg)](https://streamlit.io/)
 [![SQLite](https://img.shields.io/badge/SQLite-3.0-003b57.svg)](https://www.sqlite.org/)
 [![CWA Open Data](https://img.shields.io/badge/API-CWA%20Open%20Data-00a8e8.svg)](https://opendata.cwa.gov.tw/)
 
-本專案依據「**AI 創新微課程 Taiwan Weather Forecast**」24 步驟藍圖打造，整合中央氣象署 (CWA) Open Data API、SQLite 資料庫與 Streamlit 互動式 Web App，提供全台灣 22 縣市即時氣象預報、天氣特報提醒、颱風動態監測、降雨機率柱狀圖與 AI 智慧穿搭/出遊建議。
+本專案依據「**AI 創新微課程 Taiwan Weather Forecast**」24 步驟藍圖打造，整合中央氣象署 (CWA) Open Data API、SQLite 資料庫、Vercel Serverless 與 Streamlit 互動式 Web App，提供全台灣 22 縣市即時氣象預報、天氣特報提醒、颱風動態監測、降雨機率柱狀圖與 AI 智慧穿搭/出遊建議。
 
 ---
 
-## 🚀 Live Demo 快速啟動
+## ⚡ Vercel 雲端部署 (Vercel Deployment Guide)
 
-### 1. 本地即時運行 (Local Live Demo)
-拉取專案並在本地啟動 Streamlit 儀表板：
+本專案內建 `vercel.json` 與 Serverless Function (`api/index.py`)，支援一鍵部署至 **Vercel 雲端平台**：
+
+### 1. 一鍵部署 (1-Click Deploy)
+點擊下方按鈕或前往 Vercel 匯入專案：
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjohnny051777%2FIoTclass_HW1)
+
+### 2. Vercel 手動部署步驟 (Step-by-Step)
+1. 登入 [Vercel Dashboard](https://vercel.com/dashboard)。
+2. 點擊 **"Add New"** ➔ **"Project"**。
+3. 選擇並匯入您的 GitHub 儲存庫 `johnny051777/IoTclass_HW1`。
+4. **Environment Variables (環境變數設定)**：
+   - Key: `CWA_API_KEY`
+   - Value: `CWA-55FDA6D3-A43C-4AE0-BB30-E62D5F684FB2`
+5. 點擊 **"Deploy"**，等待約 1 分鐘即可取得專屬 Vercel 網址 (如 `https://iotclass-hw1.vercel.app`)！
+
+---
+
+## 🚀 本地啟動 (Local Live Demo)
 
 ```bash
 # 1. 複製專案儲存庫
@@ -47,11 +65,12 @@ python -m streamlit run app.py
 
 | 模組 (Layer) | 使用技術 (Technologies) |
 |---|---|
-| **Web Frontend** | Streamlit, Plotly Express, Folium, streamlit-folium, Custom CSS |
+| **Vercel Runtime** | `@vercel/python`, Flask Serverless Handler (`api/index.py`) |
+| **Streamlit UI** | Streamlit, Plotly Express, Folium, streamlit-folium, Custom CSS |
 | **Data Backend** | Python 3, Requests, Pandas, urllib3 |
-| **Database** | SQLite 3 (`data.db`), SQL DDL/DML, Idempotent Operations |
+| **Database** | SQLite 3 (`data.db`), SQL DDL/DML |
 | **API Integration** | CWA Open Data REST API (`F-C0032-001`, `W-C0033-001`) |
-| **Security & Config**| `.env` Environment Variables, Git Ignore Protection |
+| **Security & Config**| `vercel.json`, `.env` Environment Variables, Git Ignore |
 
 ---
 
@@ -59,38 +78,20 @@ python -m streamlit run app.py
 
 ```text
 IoTclass_HW1/
+├── vercel.json                 # Vercel 雲端部署路由與 Serverless 設定檔
+├── api/
+│   └── index.py                # Vercel Serverless Function (Flask 入口)
 ├── app.py                      # Streamlit 視覺化主程式 (含地圖、圖表、AI建議)
 ├── fetch_data.py               # CWA API 抓取、JSON 解析與 SQLite 資料寫入管道
 ├── db_manager.py               # SQLite 資料庫 CRUD 操作與 Schema 自動遷移模組
 ├── data.db                     # SQLite 氣象與警特報資料庫
 ├── .env                        # 環境變數設定檔 (存儲 CWA_API_KEY)
 ├── .env.example                # 環境變數範本檔
-├── requirements.txt            # Python 依賴套件清單
+├── requirements.txt            # Python 依賴套件清單 (含 Flask)
 ├── .agent/workflows/
 │   └── taiwan_weather_forecast.md  # 24 步驟完整開發工作流程文檔
-└── README.md                   # 專案說明與 Live Demo 指南
+└── README.md                   # 專案說明、Vercel 部署與 Live Demo 指南
 ```
-
----
-
-## 🔑 環境變數設定 (`.env`)
-
-本專案使用 `.env` 檔案管理敏感金鑰，已設定 `.gitignore` 防止金鑰外洩：
-
-1. 參考 `.env.example` 建立 `.env`：
-   ```env
-   CWA_API_KEY=CWA-55FDA6D3-A43C-4AE0-BB30-E62D5F684FB2
-   ```
-2. API Key 可於 [中央氣象署開放資料平台](https://opendata.cwa.gov.tw/) 免費註冊取得。
-
----
-
-## 📜 24 步驟學習藍圖 (Roadmap)
-
-本專案完整落實以下 24 個步驟開發藍圖：
-1. 課程介紹 2. 台灣的天氣與生活 3. 中央氣象署 CWA 平台 4. API 資料取得 5. JSON 資料解析 6. 提取溫差數值 7. Pandas 資料整理 8. 建立 SQLite 資料庫 9. 資料庫設計 10. 查詢驗證 11. Streamlit 入門 12. 從資料庫讀取 13. 下拉選單地區選擇 14. 繪製折線圖 15. 顯示資料表格 16. 整合 Web 介面 17. 台灣地圖視覺化 18. 選擇日期顯示地圖 19. 完整成果展示 20. 程式碼優化 21. 專案上傳至 GitHub 22. 延伸應用想法 23. 回顧與重點整理 24. 下一步探索。
-
-文檔詳見 [.agent/workflows/taiwan_weather_forecast.md](.agent/workflows/taiwan_weather_forecast.md)。
 
 ---
 
