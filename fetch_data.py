@@ -26,7 +26,7 @@ CWA_ALERT_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/W-C0033-001"
 
 def get_cwa_api_key() -> str:
     """Read API Key from .env environment variable CWA_API_KEY."""
-    return os.environ.get("CWA_API_KEY", "CWA-55FDA6D3-A43C-4AE0-BB30-E62D5F684FB2")
+    return os.environ.get("CWA_API_KEY", "CWA-09DF8749-FF8C-4111-AC18-A769E54E9B62")
 
 def fetch_cwa_forecasts(api_key: Optional[str] = None) -> Optional[dict]:
     """Step 4: Fetch live JSON weather data for all 22 Taiwan counties."""
@@ -136,11 +136,11 @@ def parse_cwa_json(json_data: dict) -> List[Dict[str, any]]:
 def get_typhoon_status() -> Dict[str, any]:
     """Retrieve typhoon status and tropical cyclone warning metrics."""
     return {
-        "active_typhoons": 0, # Current Pacific Tropical Cyclone status
+        "active_typhoons": 0,
         "name": "無接近颱風",
         "level": "西北太平洋目前無暴風圈警戒目標",
-        "pressure": 1012, # hPa
-        "max_wind": 15, # m/s
+        "pressure": 1012,
+        "max_wind": 15,
         "status_color": "🟢 良好",
         "message": "目前臺灣周邊海域氣壓平穩，西北太平洋無即時侵臺颱風警報。"
     }
@@ -150,7 +150,7 @@ def run_pipeline(api_key: Optional[str] = None):
     db_manager.init_db()
     
     key_used = api_key if api_key else get_cwa_api_key()
-    print(f"Fetching CWA data (Key len: {len(key_used)})...")
+    print(f"Fetching CWA data via key {key_used[:10]}... (Len: {len(key_used)})")
     json_data = fetch_cwa_forecasts(key_used)
     
     records = []
