@@ -11,9 +11,11 @@ def get_connection(db_path: str = DB_NAME) -> sqlite3.Connection:
     return conn
 
 def init_db(db_path: str = DB_NAME) -> None:
-    """Step 8 & 9: Create database and TemperatureForecasts table if not exists."""
+    """Step 8, 9 & Upgrade: Create database, TemperatureForecasts table, and WeatherAlerts table."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
+        
+        # TemperatureForecasts table with wx, pop, ci
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS TemperatureForecasts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,58 +23,92 @@ def init_db(db_path: str = DB_NAME) -> None:
                 dataDate TEXT NOT NULL,
                 mint REAL NOT NULL,
                 maxt REAL NOT NULL,
+                wx TEXT DEFAULT '多雲',
+                pop REAL DEFAULT 0,
+                ci TEXT DEFAULT '舒適',
                 UNIQUE(regionName, dataDate)
             );
         """)
+        
+        # Schema migration check: add columns if table existed prior to upgrade
+        cursor.execute("PRAGMA table_info(TemperatureForecasts);")
+        existing_cols = [col["name"] for col in cursor.fetchall()]
+        if "wx" not in existing_cols:
+            cursor.execute("ALTER TABLE TemperatureForecasts ADD COLUMN wx TEXT DEFAULT '多雲';")
+        if "pop" not in existing_cols:
+            cursor.execute("ALTER TABLE TemperatureForecasts ADD COLUMN pop REAL DEFAULT 0;")
+        if "ci" not in existing_cols:
+            cursor.execute("ALTER TABLE TemperatureForecasts ADD COLUMN ci TEXT DEFAULT '舒適';")
+
+        # WeatherAlerts table for CWA weather warnings
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS WeatherAlerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                headline TEXT NOT NULL,
+                event TEXT NOT NULL,
+                description TEXT,
+                areaName TEXT,
+                updatedTime TEXT,
+                UNIQUE(headline, areaName)
+            );
+        """)
         conn.commit()
-    print("Database and table 'TemperatureForecasts' initialized successfully.")
 
 def insert_forecasts(records: List[Dict[str, any]], db_path: str = DB_NAME) -> int:
-    """
-    Step 8 & 20: Insert forecast records idempotently (ignore duplicates).
-    Each dict in records: {'regionName': str, 'dataDate': str, 'mint': float, 'maxt': float}
-    """
+    """Insert or replace forecast records idempotently with wx, pop, and ci."""
     inserted_count = 0
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
         for rec in records:
             cursor.execute("""
-                INSERT OR IGNORE INTO TemperatureForecasts (regionName, dataDate, mint, maxt)
-                VALUES (?, ?, ?, ?);
-            """, (rec['regionName'], rec['dataDate'], float(rec['mint']), float(rec['maxt'])))
+                INSERT INTO TemperatureForecasts (regionName, dataDate, mint, maxt, wx, pop, ci)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(regionName, dataDate) DO UPDATE SET
+                    mint=excluded.mint,
+                    maxt=excluded.maxt,
+                    wx=excluded.wx,
+                    pop=excluded.pop,
+                    ci=excluded.ci;
+            """, (
+                rec['regionName'], 
+                rec['dataDate'], 
+                float(rec['mint']), 
+                float(rec['maxt']),
+                rec.get('wx', '多雲'),
+                float(rec.get('pop', 0)),
+                rec.get('ci', '舒適')
+            ))
             if cursor.rowcount > 0:
                 inserted_count += 1
         conn.commit()
     return inserted_count
 
-def get_distinct_regions(db_path: str = DB_NAME) -> List[str]:
-    """Step 10: SELECT DISTINCT regionName FROM TemperatureForecasts."""
+def insert_alerts(alerts: List[Dict[str, any]], db_path: str = DB_NAME) -> None:
+    """Insert active weather warnings into WeatherAlerts table."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT regionName FROM TemperatureForecasts ORDER BY regionName;")
-        rows = cursor.fetchall()
-        return [row["regionName"] for row in rows]
+        cursor.execute("DELETE FROM WeatherAlerts;")
+        for a in alerts:
+            cursor.execute("""
+                INSERT OR IGNORE INTO WeatherAlerts (headline, event, description, areaName, updatedTime)
+                VALUES (?, ?, ?, ?, ?);
+            """, (a['headline'], a['event'], a.get('description', ''), a.get('areaName', '全台'), a.get('updatedTime', '')));
+        conn.commit()
 
-def query_by_region(region_name: str, db_path: str = DB_NAME) -> List[Dict[str, any]]:
-    """Step 10: SELECT * FROM TemperatureForecasts WHERE regionName = ?."""
+def query_alerts(db_path: str = DB_NAME) -> List[Dict[str, any]]:
+    """Query active weather alerts."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, regionName, dataDate, mint, maxt 
-            FROM TemperatureForecasts 
-            WHERE regionName = ? 
-            ORDER BY dataDate ASC;
-        """, (region_name,))
+        cursor.execute("SELECT headline, event, description, areaName, updatedTime FROM WeatherAlerts;")
         return [dict(row) for row in cursor.fetchall()]
 
 def query_all(db_path: str = DB_NAME) -> List[Dict[str, any]]:
-    """SELECT * FROM TemperatureForecasts ORDER BY dataDate, regionName."""
+    """SELECT all records including wx, pop, and ci."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, regionName, dataDate, mint, maxt FROM TemperatureForecasts ORDER BY dataDate ASC;")
+        cursor.execute("SELECT id, regionName, dataDate, mint, maxt, wx, pop, ci FROM TemperatureForecasts ORDER BY dataDate ASC;")
         return [dict(row) for row in cursor.fetchall()]
 
 if __name__ == "__main__":
-    # Test database setup & queries (Step 10 Verification)
     init_db()
-    print("Distinct regions:", get_distinct_regions())
+    print("Database schema migration complete.")
