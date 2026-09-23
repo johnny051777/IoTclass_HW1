@@ -101,6 +101,28 @@ st.markdown("""
 # Sidebar Controls (Step 13 & 18)
 st.sidebar.header("🔍 預報操作與過濾")
 
+# CWA API Key Setting (Step 3 & 4)
+st.sidebar.subheader("🔑 中央氣象署 API 設定")
+cwa_key_input = st.sidebar.text_input(
+    "API 授權碼 (CWA API Key):",
+    type="password",
+    placeholder="CWA-xxxxxxxx-xxxx-...",
+    help="至 opendata.cwa.gov.tw 免費註冊即可取得授權碼"
+)
+
+if st.sidebar.button("📡 連線 CWA 即時同步預報"):
+    if cwa_key_input:
+        with st.spinner("連線 CWA API 中..."):
+            fetch_data.run_pipeline(api_key=cwa_key_input)
+            st.cache_data.clear()
+            st.sidebar.success("✅ 已同步 CWA 最新天氣資料！")
+            st.rerun()
+    else:
+        st.sidebar.warning("⚠️ 請輸入有效的 CWA API Key")
+
+st.sidebar.caption("💡 提示：若未輸入 API Key，系統使用完整預設氣象資料庫存取。")
+st.sidebar.markdown("---")
+
 if not df_all.empty:
     distinct_regions = sorted(df_all["regionName"].unique().tolist())
     distinct_dates = sorted(df_all["dataDate"].unique().tolist())
