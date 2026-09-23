@@ -2,17 +2,23 @@ import sqlite3
 import os
 from typing import List, Dict, Tuple, Optional
 
-DB_NAME = "data.db"
+# On Vercel serverless runtime, only /tmp is writable
+def get_db_path() -> str:
+    if os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"):
+        return "/tmp/data.db"
+    return os.environ.get("DB_PATH", "data.db")
 
-def get_connection(db_path: str = DB_NAME) -> sqlite3.Connection:
+def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     """Create and return a SQLite database connection."""
-    conn = sqlite3.connect(db_path)
+    target_path = db_path if db_path else get_db_path()
+    conn = sqlite3.connect(target_path)
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db(db_path: str = DB_NAME) -> None:
-    """Step 8, 9 & Upgrade: Create database, TemperatureForecasts table, and WeatherAlerts table."""
-    with get_connection(db_path) as conn:
+def init_db(db_path: Optional[str] = None) -> None:
+    """Create database, TemperatureForecasts table, and WeatherAlerts table."""
+    target_path = db_path if db_path else get_db_path()
+    with get_connection(target_path) as conn:
         cursor = conn.cursor()
         
         # TemperatureForecasts table with wx, pop, ci
@@ -30,7 +36,7 @@ def init_db(db_path: str = DB_NAME) -> None:
             );
         """)
         
-        # Schema migration check: add columns if table existed prior to upgrade
+        # Schema migration check
         cursor.execute("PRAGMA table_info(TemperatureForecasts);")
         existing_cols = [col["name"] for col in cursor.fetchall()]
         if "wx" not in existing_cols:
@@ -54,10 +60,11 @@ def init_db(db_path: str = DB_NAME) -> None:
         """)
         conn.commit()
 
-def insert_forecasts(records: List[Dict[str, any]], db_path: str = DB_NAME) -> int:
+def insert_forecasts(records: List[Dict[str, any]], db_path: Optional[str] = None) -> int:
     """Insert or replace forecast records idempotently with wx, pop, and ci."""
+    target_path = db_path if db_path else get_db_path()
     inserted_count = 0
-    with get_connection(db_path) as conn:
+    with get_connection(target_path) as conn:
         cursor = conn.cursor()
         for rec in records:
             cursor.execute("""
@@ -83,9 +90,10 @@ def insert_forecasts(records: List[Dict[str, any]], db_path: str = DB_NAME) -> i
         conn.commit()
     return inserted_count
 
-def insert_alerts(alerts: List[Dict[str, any]], db_path: str = DB_NAME) -> None:
+def insert_alerts(alerts: List[Dict[str, any]], db_path: Optional[str] = None) -> None:
     """Insert active weather warnings into WeatherAlerts table."""
-    with get_connection(db_path) as conn:
+    target_path = db_path if db_path else get_db_path()
+    with get_connection(target_path) as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM WeatherAlerts;")
         for a in alerts:
@@ -95,20 +103,22 @@ def insert_alerts(alerts: List[Dict[str, any]], db_path: str = DB_NAME) -> None:
             """, (a['headline'], a['event'], a.get('description', ''), a.get('areaName', '全台'), a.get('updatedTime', '')));
         conn.commit()
 
-def query_alerts(db_path: str = DB_NAME) -> List[Dict[str, any]]:
+def query_alerts(db_path: Optional[str] = None) -> List[Dict[str, any]]:
     """Query active weather alerts."""
-    with get_connection(db_path) as conn:
+    target_path = db_path if db_path else get_db_path()
+    with get_connection(target_path) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT headline, event, description, areaName, updatedTime FROM WeatherAlerts;")
         return [dict(row) for row in cursor.fetchall()]
 
-def query_all(db_path: str = DB_NAME) -> List[Dict[str, any]]:
+def query_all(db_path: Optional[str] = None) -> List[Dict[str, any]]:
     """SELECT all records including wx, pop, and ci."""
-    with get_connection(db_path) as conn:
+    target_path = db_path if db_path else get_db_path()
+    with get_connection(target_path) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id, regionName, dataDate, mint, maxt, wx, pop, ci FROM TemperatureForecasts ORDER BY dataDate ASC;")
         return [dict(row) for row in cursor.fetchall()]
 
 if __name__ == "__main__":
     init_db()
-    print("Database schema migration complete.")
+    print(f"Database initialized at: {get_db_path()}")

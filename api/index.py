@@ -1,6 +1,7 @@
 from flask import Flask, render_template_string, request, jsonify
 import sys
 import os
+import traceback
 
 # Add parent directory to path to import db_manager and fetch_data
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,7 +26,6 @@ HTML_TEMPLATE = """
         .hero-header { background: linear-gradient(135deg, #0052D4 0%, #4364F7 50%, #6FB1FC 100%); color: white; padding: 24px; border-radius: 16px; margin-bottom: 20px; }
         .card-custom { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         #map { height: 460px; border-radius: 12px; }
-        .badge-chip { display: inline-block; padding: 5px 12px; border-radius: 20px; font-weight: 600; font-size: 0.85rem; margin-right: 6px; }
     </style>
 </head>
 <body>
@@ -143,55 +143,62 @@ REGION_COORDS = {
 
 @app.route("/", methods=["GET"])
 def index():
-    db_manager.init_db()
-    fetch_data.run_pipeline()
-    rows = db_manager.query_all()
-    alerts = db_manager.query_alerts()
-    
-    df = pd.DataFrame(rows)
-    counties = sorted(df["regionName"].unique().tolist()) if not df.empty else list(REGION_COORDS.keys())
-    
-    selected_county = request.args.get("county", counties[0] if counties else "臺北市")
-    
-    df_loc = df[df["regionName"] == selected_county] if not df.empty else pd.DataFrame()
-    curr_data = df_loc.iloc[0].to_dict() if not df_loc.empty else None
-    
-    # Map markers payload
-    map_data = []
-    if not df.empty:
-        latest_df = df.groupby("regionName").first().reset_index()
-        for _, r in latest_df.iterrows():
-            cname = r["regionName"]
-            lat, lng = REGION_COORDS.get(cname, (23.8, 121.0))
-            mint, maxt = float(r["mint"]), float(r["maxt"])
-            map_data.append({
-                "name": cname,
-                "lat": lat, "lng": lng,
-                "mint": mint, "maxt": maxt,
-                "avg_temp": (mint + maxt) / 2.0,
-                "wx": r.get("wx", "多雲"),
-                "pop": r.get("pop", 20)
-            })
+    try:
+        db_manager.init_db()
+        rows = db_manager.query_all()
+        if not rows:
+            fetch_data.run_pipeline()
+            rows = db_manager.query_all()
             
-    # AI Recommendations
-    avg_t = (curr_data["mint"] + curr_data["maxt"])/2.0 if curr_data else 25.0
-    pop_v = curr_data["pop"] if curr_data else 20.0
-    
-    outfit_advice = "🧥 保暖外套" if avg_t < 18 else ("👔 薄長袖外套" if avg_t < 24 else "👕 舒適短袖與防曬")
-    rain_advice = "☔ 降雨機率高，務必攜帶雨具！" if pop_v >= 50 else ("🌂 建議準備備用小傘" if pop_v >= 30 else "☀️ 天氣良好出門免帶傘")
-    outdoor_advice = "🟢 適合戶外活動與洗車" if pop_v < 30 else "🔴 降雨風險高，建議室內活動"
+        alerts = db_manager.query_alerts()
+        
+        df = pd.DataFrame(rows)
+        counties = sorted(df["regionName"].unique().tolist()) if not df.empty else list(REGION_COORDS.keys())
+        
+        selected_county = request.args.get("county", counties[0] if counties else "臺北市")
+        
+        df_loc = df[df["regionName"] == selected_county] if not df.empty else pd.DataFrame()
+        curr_data = df_loc.iloc[0].to_dict() if not df_loc.empty else None
+        
+        # Map markers payload
+        map_data = []
+        if not df.empty:
+            latest_df = df.groupby("regionName").first().reset_index()
+            for _, r in latest_df.iterrows():
+                cname = r["regionName"]
+                lat, lng = REGION_COORDS.get(cname, (23.8, 121.0))
+                mint, maxt = float(r["mint"]), float(r["maxt"])
+                map_data.append({
+                    "name": cname,
+                    "lat": lat, "lng": lng,
+                    "mint": mint, "maxt": maxt,
+                    "avg_temp": (mint + maxt) / 2.0,
+                    "wx": r.get("wx", "多雲"),
+                    "pop": r.get("pop", 20)
+                })
+                
+        # AI Recommendations
+        avg_t = (curr_data["mint"] + curr_data["maxt"])/2.0 if curr_data else 25.0
+        pop_v = curr_data["pop"] if curr_data else 20.0
+        
+        outfit_advice = "🧥 保暖外套" if avg_t < 18 else ("👔 薄長袖外套" if avg_t < 24 else "👕 舒適短袖與防曬")
+        rain_advice = "☔ 降雨機率高，務必攜帶雨具！" if pop_v >= 50 else ("🌂 建議準備備用小傘" if pop_v >= 30 else "☀️ 天氣良好出門免帶傘")
+        outdoor_advice = "🟢 適合戶外活動與洗車" if pop_v < 30 else "🔴 降雨風險高，建議室內活動"
 
-    return render_template_string(
-        HTML_TEMPLATE,
-        counties=counties,
-        selected_county=selected_county,
-        curr_data=curr_data,
-        alerts=alerts,
-        map_data=map_data,
-        outfit_advice=outfit_advice,
-        rain_advice=rain_advice,
-        outdoor_advice=outdoor_advice
-    )
+        return render_template_string(
+            HTML_TEMPLATE,
+            counties=counties,
+            selected_county=selected_county,
+            curr_data=curr_data,
+            alerts=alerts,
+            map_data=map_data,
+            outfit_advice=outfit_advice,
+            rain_advice=rain_advice,
+            outdoor_advice=outdoor_advice
+        )
+    except Exception as e:
+        err_msg = traceback.format_exc()
+        return f"<div style='padding:20px; font-family:sans-serif;'><h2>⚠️ Vercel Application Error</h2><pre>{err_msg}</pre></div>", 500
 
 if __name__ == "__main__":
     app.run(debug=True)
