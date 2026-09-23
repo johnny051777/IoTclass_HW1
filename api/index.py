@@ -248,20 +248,31 @@ def index():
         alerts = db_manager.query_alerts()
         typhoon_info = fetch_data.get_typhoon_status()
         
-        df = pd.DataFrame(rows)
-        if not df.empty:
-            df["dataDate"] = pd.to_datetime(df["dataDate"]).dt.strftime("%Y-%m-%d")
+        # Defensive DataFrame construction
+        if rows:
+            df = pd.DataFrame(rows)
+        else:
+            df = pd.DataFrame(columns=["regionName", "dataDate", "mint", "maxt", "wx", "pop", "ci"])
             
-        counties = sorted(df["regionName"].unique().tolist()) if not df.empty else list(REGION_COORDS.keys())
-        dates = sorted(df["dataDate"].unique().tolist()) if not df.empty else ["2026-09-23"]
+        if not df.empty and "dataDate" in df.columns:
+            df["dataDate"] = pd.to_datetime(df["dataDate"]).dt.strftime("%Y-%m-%d")
+        else:
+            df["dataDate"] = []
+            
+        counties = sorted(df["regionName"].unique().tolist()) if (not df.empty and "regionName" in df.columns) else list(REGION_COORDS.keys())
+        dates = sorted(df["dataDate"].unique().tolist()) if (not df.empty and "dataDate" in df.columns) else ["2026-09-23"]
         
         selected_county = request.args.get("county", counties[0] if counties else "臺北市")
         selected_date = request.args.get("date", dates[0] if dates else "2026-09-23")
         
-        df_loc = df[df["regionName"] == selected_county].sort_values("dataDate") if not df.empty else pd.DataFrame()
-        
-        latest_match = df_loc[df_loc["dataDate"] == selected_date]
-        curr_row = latest_match.iloc[0] if not latest_match.empty else (df_loc.iloc[0] if not df_loc.empty else None)
+        df_loc = pd.DataFrame()
+        if not df.empty and "regionName" in df.columns and "dataDate" in df.columns:
+            df_loc = df[df["regionName"] == selected_county].sort_values("dataDate")
+            
+        curr_row = None
+        if not df_loc.empty and "dataDate" in df_loc.columns:
+            latest_match = df_loc[df_loc["dataDate"] == selected_date]
+            curr_row = latest_match.iloc[0] if not latest_match.empty else df_loc.iloc[0]
         
         curr_maxt = curr_row["maxt"] if curr_row is not None else 28.0
         curr_mint = curr_row["mint"] if curr_row is not None else 22.0
@@ -271,16 +282,16 @@ def index():
 
         # Chart payload
         chart_payload = {
-            "dates": df_loc["dataDate"].tolist() if not df_loc.empty else [],
-            "maxt": df_loc["maxt"].tolist() if not df_loc.empty else [],
-            "mint": df_loc["mint"].tolist() if not df_loc.empty else [],
-            "pop": df_loc["pop"].tolist() if not df_loc.empty else []
+            "dates": df_loc["dataDate"].tolist() if (not df_loc.empty and "dataDate" in df_loc.columns) else [],
+            "maxt": df_loc["maxt"].tolist() if (not df_loc.empty and "maxt" in df_loc.columns) else [],
+            "mint": df_loc["mint"].tolist() if (not df_loc.empty and "mint" in df_loc.columns) else [],
+            "pop": df_loc["pop"].tolist() if (not df_loc.empty and "pop" in df_loc.columns) else []
         }
         
         # Map payload filtered by selected date
-        df_date = df[df["dataDate"] == selected_date] if not df.empty else pd.DataFrame()
         map_payload = []
-        if not df_date.empty:
+        if not df.empty and "dataDate" in df.columns:
+            df_date = df[df["dataDate"] == selected_date]
             for _, r in df_date.iterrows():
                 cname = r["regionName"]
                 lat, lng = REGION_COORDS.get(cname, (23.8, 121.0))
