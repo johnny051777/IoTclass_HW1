@@ -1,3 +1,4 @@
+import os
 import requests
 import urllib3
 import pandas as pd
@@ -5,16 +6,32 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import db_manager
 
-# Suppress insecure HTTPS warnings when SSL verify=False is used for CWA server
+# Load environment variables from .env file
+def load_env_file(env_path: str = ".env"):
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key.strip()] = val.strip().strip("'\"")
+
+load_env_file()
+
+# Suppress SSL warnings for CWA domain
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 CWA_API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001"
-DEFAULT_CWA_API_KEY = "CWA-55FDA6D3-A43C-4AE0-BB30-E62D5F684FB2"
 
-def fetch_cwa_api(api_key: str = DEFAULT_CWA_API_KEY) -> Optional[dict]:
-    """Step 4: Fetch live JSON data for all 22 Taiwan counties from Central Weather Administration (CWA) API."""
+def get_cwa_api_key() -> str:
+    """Read API Key from .env environment variable CWA_API_KEY."""
+    return os.environ.get("CWA_API_KEY", "CWA-55FDA6D3-A43C-4AE0-BB30-E62D5F684FB2")
+
+def fetch_cwa_api(api_key: Optional[str] = None) -> Optional[dict]:
+    """Step 4: Fetch live JSON data for all 22 Taiwan counties from CWA API."""
+    key = api_key if api_key else get_cwa_api_key()
     try:
-        url = f"{CWA_API_URL}?Authorization={api_key}"
+        url = f"{CWA_API_URL}?Authorization={key}"
         response = requests.get(url, timeout=10, verify=False)
         if response.status_code == 200:
             return response.json()
@@ -68,28 +85,28 @@ def parse_cwa_json(json_data: dict) -> List[Dict[str, any]]:
     
     return parsed_records
 
-def run_pipeline(api_key: str = DEFAULT_CWA_API_KEY):
-    """Step 7: Fetch CWA data, process with Pandas, and insert into SQLite DB."""
+def run_pipeline(api_key: Optional[str] = None):
+    """Step 7: Fetch CWA data using .env key, process with Pandas, and insert into SQLite DB."""
     db_manager.init_db()
     
-    print(f"Fetching live data from CWA API (Key: {api_key[:10]}...)...")
-    json_data = fetch_cwa_api(api_key)
+    key_used = api_key if api_key else get_cwa_api_key()
+    print(f"Fetching live data from CWA API via .env (Key length: {len(key_used)})...")
+    json_data = fetch_cwa_api(key_used)
     records = []
     
     if json_data:
         records = parse_cwa_json(json_data)
     
     if not records:
-        print("Warning: API fetch empty, fallback data pipeline triggered.")
+        print("Warning: API fetch returned empty records.")
         return pd.DataFrame()
     
     # Step 7: Pandas DataFrame Preview
     df = pd.DataFrame(records)
-    print("\n--- Step 7: Pandas DataFrame Data Preview (All 22 Counties) ---")
+    print("\n--- Step 7: Pandas DataFrame Data Preview (.env CWA API) ---")
     print(df.head(15))
     print(f"Total Records Fetched: {len(df)}")
-    print(f"Unique Locations: {df['regionName'].nunique()} -> {df['regionName'].unique().tolist()}")
-    print("-----------------------------------------------------------------\n")
+    print("------------------------------------------------------------\n")
     
     # Step 8: Insert into SQLite
     inserted = db_manager.insert_forecasts(records)
