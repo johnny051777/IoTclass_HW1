@@ -10,7 +10,7 @@ import fetch_data
 
 # Page Configuration
 st.set_page_config(
-    page_title="Taiwan Weather Forecast Dashboard - 所有縣市",
+    page_title="Taiwan Weather Forecast Dashboard - 全台 22 縣市",
     page_icon="☀️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -50,13 +50,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-DEFAULT_CWA_KEY = "CWA-55FDA6D3-A43C-4AE0-BB30-E62D5F684FB2"
-
-# Step 12: Ensure DB is initialized and populates data using default CWA Key
+# Step 12: Ensure DB is initialized and populates data via backend
 @st.cache_data(show_spinner="讀取全台 22 縣市氣象資料中...")
-def load_data(api_key=DEFAULT_CWA_KEY):
+def load_data():
     db_manager.init_db()
-    fetch_data.run_pipeline(api_key=api_key)
+    fetch_data.run_pipeline()
     data = db_manager.query_all()
     df = pd.DataFrame(data)
     if not df.empty:
@@ -72,31 +70,24 @@ except Exception as e:
 # Header Area (Step 16 & 19)
 st.markdown("""
 <div class="main-header">
-    <h1>☀️ Taiwan Weather Forecast Dashboard (全台 22 縣市)</h1>
-    <p>中央氣象署 CWA API (已內建 API Key) x Python x SQLite x Streamlit 互動式天氣預報</p>
+    <h1>☀️ Taiwan Weather Forecast Dashboard</h1>
+    <p>中央氣象署 CWA API x Python x SQLite x Streamlit 全台 22 縣市天氣預報</p>
 </div>
 """, unsafe_allow_html=True)
 
 # Sidebar Controls (Step 13 & 18)
 st.sidebar.header("🔍 縣市選擇與過濾")
 
-# CWA API Key Controller
-st.sidebar.subheader("🔑 中央氣象署 API 設定")
-cwa_key_input = st.sidebar.text_input(
-    "CWA API Key:",
-    value=DEFAULT_CWA_KEY,
-    type="password",
-    help="已為您自動載入此 API Key：CWA-55FDA6D3-A43C-4AE0-BB30-E62D5F684FB2"
-)
+# Backend API Status (API Key is hidden from UI)
+st.sidebar.success("🟢 API 狀態：已連線中央氣象署 (CWA)")
 
 if st.sidebar.button("🔄 同步即時氣象資料"):
     with st.spinner("連線中央氣象署同步最新預報..."):
-        df_new = fetch_data.run_pipeline(api_key=cwa_key_input.strip())
+        df_new = fetch_data.run_pipeline()
         st.cache_data.clear()
-        st.sidebar.success("✅ 已同步全台 22 縣市最新氣象！")
+        st.sidebar.success("✅ 已成功同步全台 22 縣市最新氣象！")
         st.rerun()
 
-st.sidebar.caption("✅ 狀態：CWA API Key 已設定，連線全台 22 縣市實時資料庫。")
 st.sidebar.markdown("---")
 
 if not df_all.empty:
@@ -121,7 +112,7 @@ selected_date_str = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info(f"全台共有 {len(distinct_locations)} 個縣市資料處理中。")
+st.sidebar.info(f"📊 目前展現全台 {len(distinct_locations)} 個縣市氣象預報。")
 
 # Main Content Layout - 2 Columns (Left: Trends & Table, Right: Folium Map)
 col_left, col_right = st.columns([1.1, 0.9])
