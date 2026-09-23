@@ -51,11 +51,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Step 12: Ensure DB is initialized and populates data via backend
-@st.cache_data(show_spinner="讀取全台 22 縣市氣象資料中...")
+@st.cache_data(show_spinner="讀取全台 22 縣市即時氣象資料庫...")
 def load_data():
     db_manager.init_db()
-    fetch_data.run_pipeline()
     data = db_manager.query_all()
+    if not data:
+        fetch_data.run_pipeline()
+        data = db_manager.query_all()
     df = pd.DataFrame(data)
     if not df.empty:
         df["dataDate"] = pd.to_datetime(df["dataDate"]).dt.strftime("%Y-%m-%d")
@@ -95,7 +97,7 @@ if not df_all.empty:
     distinct_dates = sorted(df_all["dataDate"].unique().tolist())
 else:
     distinct_locations = ["臺北市", "新北市", "桃園市", "臺中市", "臺南市", "高雄市"]
-    distinct_dates = ["2026-04-14"]
+    distinct_dates = [datetime.now().strftime("%Y-%m-%d")]
 
 # Step 13: Region Selectbox Dropdown for ALL 22 Counties
 selected_location = st.sidebar.selectbox(
@@ -104,7 +106,7 @@ selected_location = st.sidebar.selectbox(
     index=0
 )
 
-# Step 18: Date Picker for Map & Dashboard
+# Step 18: Date Picker for Map & Dashboard (Default to latest live date)
 selected_date_str = st.sidebar.selectbox(
     "📅 選擇檢視日期 (Select Date):",
     options=distinct_dates,
@@ -171,7 +173,7 @@ with col_left:
 with col_right:
     st.subheader(f"🗺️ 全台 22 縣市地圖 ({selected_date_str})")
     
-    # Step 17 & 18: Folium Map Visualization for ALL 22 Taiwan Counties
+    # Step 17 & 18: Folium Map Visualization using OpenStreetMap (Free, No Key Required)
     region_coords = {
         "臺北市": (25.0330, 121.5654),
         "新北市": (24.9157, 121.6739),
@@ -194,17 +196,11 @@ with col_right:
         "臺東縣": (22.7583, 121.1444),
         "澎湖縣": (23.5711, 119.5793),
         "金門縣": (24.4493, 118.3766),
-        "連江縣": (26.1505, 119.9499),
-        "北部地區": (25.0330, 121.5654),
-        "中部地區": (24.1477, 120.6736),
-        "南部地區": (22.6273, 120.3014),
-        "東北部地區": (24.7570, 121.7530),
-        "東部地區": (23.9872, 121.6015),
-        "東南部地區": (22.7583, 121.1444)
+        "連江縣": (26.1505, 119.9499)
     }
     
-    # Create Folium Map centered on Taiwan
-    m = folium.Map(location=[23.8, 121.0], zoom_start=7, tiles="CartoDB positron")
+    # Use standard OpenStreetMap tiles (100% free, no API key needed!)
+    m = folium.Map(location=[23.8, 121.0], zoom_start=7, tiles="OpenStreetMap")
     
     # Filter data for selected date
     df_date = df_all[df_all["dataDate"] == selected_date_str] if not df_all.empty else pd.DataFrame()
@@ -246,7 +242,7 @@ with col_right:
                 color=color,
                 fill=True,
                 fill_color=color,
-                fill_opacity=0.8,
+                fill_opacity=0.85,
             ).add_to(m)
     
     # Display Streamlit-Folium Component
