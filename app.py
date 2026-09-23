@@ -10,7 +10,7 @@ import fetch_data
 
 # Page Configuration
 st.set_page_config(
-    page_title="Taiwan Weather Forecast Dashboard",
+    page_title="Taiwan Weather Forecast Dashboard - 所有縣市",
     page_icon="☀️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -21,12 +21,12 @@ st.markdown("""
 <style>
     .main-header {
         font-family: 'Outfit', 'Inter', sans-serif;
-        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        background: linear-gradient(135deg, #0052D4 0%, #4364F7 50%, #6FB1FC 100%);
         padding: 24px 30px;
         border-radius: 16px;
         color: white;
         margin-bottom: 25px;
-        box-shadow: 0 8px 24px rgba(30, 60, 114, 0.15);
+        box-shadow: 0 8px 24px rgba(67, 100, 247, 0.2);
     }
     .main-header h1 {
         color: #ffffff;
@@ -35,30 +35,9 @@ st.markdown("""
         margin: 0 0 8px 0;
     }
     .main-header p {
-        color: #e0e6ed;
+        color: #f0f4f8;
         font-size: 1.05rem;
         margin: 0;
-    }
-    .metric-card {
-        background: #ffffff;
-        border-radius: 12px;
-        padding: 18px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        border: 1px solid #eef2f6;
-        text-align: center;
-    }
-    .metric-title {
-        color: #64748b;
-        font-size: 0.9rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .metric-value {
-        color: #0f172a;
-        font-size: 1.8rem;
-        font-weight: 700;
-        margin-top: 4px;
     }
     .legend-chip {
         display: inline-block;
@@ -71,14 +50,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Step 12: Ensure DB is initialized and populates data if empty
-@st.cache_data(show_spinner="讀取氣象資料庫中...")
-def load_data():
+DEFAULT_CWA_KEY = "CWA-55FDA6D3-A43C-4AE0-BB30-E62D5F684FB2"
+
+# Step 12: Ensure DB is initialized and populates data using default CWA Key
+@st.cache_data(show_spinner="讀取全台 22 縣市氣象資料中...")
+def load_data(api_key=DEFAULT_CWA_KEY):
     db_manager.init_db()
+    fetch_data.run_pipeline(api_key=api_key)
     data = db_manager.query_all()
-    if not data:
-        fetch_data.run_pipeline()
-        data = db_manager.query_all()
     df = pd.DataFrame(data)
     if not df.empty:
         df["dataDate"] = pd.to_datetime(df["dataDate"]).dt.strftime("%Y-%m-%d")
@@ -87,53 +66,50 @@ def load_data():
 try:
     df_all = load_data()
 except Exception as e:
-    st.error(f"資料庫讀取失敗: {e}")
+    st.error(f"資料讀取失敗: {e}")
     df_all = pd.DataFrame()
 
 # Header Area (Step 16 & 19)
 st.markdown("""
 <div class="main-header">
-    <h1>☀️ Taiwan Weather Forecast Dashboard</h1>
-    <p>中央氣象署 CWA API x Python x SQLite x Streamlit 互動式天氣預報應用</p>
+    <h1>☀️ Taiwan Weather Forecast Dashboard (全台 22 縣市)</h1>
+    <p>中央氣象署 CWA API (已內建 API Key) x Python x SQLite x Streamlit 互動式天氣預報</p>
 </div>
 """, unsafe_allow_html=True)
 
 # Sidebar Controls (Step 13 & 18)
-st.sidebar.header("🔍 預報操作與過濾")
+st.sidebar.header("🔍 縣市選擇與過濾")
 
-# CWA API Key Setting (Step 3 & 4)
+# CWA API Key Controller
 st.sidebar.subheader("🔑 中央氣象署 API 設定")
 cwa_key_input = st.sidebar.text_input(
-    "API 授權碼 (CWA API Key):",
+    "CWA API Key:",
+    value=DEFAULT_CWA_KEY,
     type="password",
-    placeholder="CWA-xxxxxxxx-xxxx-...",
-    help="至 opendata.cwa.gov.tw 免費註冊即可取得授權碼"
+    help="已為您自動載入此 API Key：CWA-55FDA6D3-A43C-4AE0-BB30-E62D5F684FB2"
 )
 
-if st.sidebar.button("📡 連線 CWA 即時同步預報"):
-    if cwa_key_input:
-        with st.spinner("連線 CWA API 中..."):
-            fetch_data.run_pipeline(api_key=cwa_key_input)
-            st.cache_data.clear()
-            st.sidebar.success("✅ 已同步 CWA 最新天氣資料！")
-            st.rerun()
-    else:
-        st.sidebar.warning("⚠️ 請輸入有效的 CWA API Key")
+if st.sidebar.button("🔄 同步即時氣象資料"):
+    with st.spinner("連線中央氣象署同步最新預報..."):
+        df_new = fetch_data.run_pipeline(api_key=cwa_key_input.strip())
+        st.cache_data.clear()
+        st.sidebar.success("✅ 已同步全台 22 縣市最新氣象！")
+        st.rerun()
 
-st.sidebar.caption("💡 提示：若未輸入 API Key，系統使用完整預設氣象資料庫存取。")
+st.sidebar.caption("✅ 狀態：CWA API Key 已設定，連線全台 22 縣市實時資料庫。")
 st.sidebar.markdown("---")
 
 if not df_all.empty:
-    distinct_regions = sorted(df_all["regionName"].unique().tolist())
+    distinct_locations = sorted(df_all["regionName"].unique().tolist())
     distinct_dates = sorted(df_all["dataDate"].unique().tolist())
 else:
-    distinct_regions = ["北部地區", "中部地區", "南部地區", "東北部地區", "東部地區", "東南部地區"]
+    distinct_locations = ["臺北市", "新北市", "桃園市", "臺中市", "臺南市", "高雄市"]
     distinct_dates = ["2026-04-14"]
 
-# Step 13: Region Selectbox Dropdown
-selected_region = st.sidebar.selectbox(
-    "📍 選擇預報地區 (Select Region):",
-    options=distinct_regions,
+# Step 13: Region Selectbox Dropdown for ALL 22 Counties
+selected_location = st.sidebar.selectbox(
+    "📍 選擇縣市 (Select County / City):",
+    options=distinct_locations,
     index=0
 )
 
@@ -145,31 +121,25 @@ selected_date_str = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info("""
-**專案特色:**
-- CWA API / Open Data JSON 提取
-- SQLite 氣溫資料庫存儲
-- 雙折線圖 (MaxT vs MinT)
-- Folium 台灣氣溫分區地圖
-""")
+st.sidebar.info(f"全台共有 {len(distinct_locations)} 個縣市資料處理中。")
 
 # Main Content Layout - 2 Columns (Left: Trends & Table, Right: Folium Map)
 col_left, col_right = st.columns([1.1, 0.9])
 
 with col_left:
-    st.subheader(f"📈 {selected_region} 一週氣溫預報 (MaxT & MinT)")
+    st.subheader(f"📈 {selected_location} 氣溫預報趨勢 (MaxT & MinT)")
     
-    # Filter data by selected region (Step 13)
-    df_region = df_all[df_all["regionName"] == selected_region].sort_values("dataDate") if not df_all.empty else pd.DataFrame()
+    # Filter data by selected location
+    df_loc = df_all[df_all["regionName"] == selected_location].sort_values("dataDate") if not df_all.empty else pd.DataFrame()
     
-    if not df_region.empty:
-        # Step 14: Interactive Line Chart with Plotly (MaxT & MinT)
+    if not df_loc.empty:
+        # Step 14: Interactive Line Chart with Plotly
         fig = go.Figure()
         
         # MaxT Line
         fig.add_trace(go.Scatter(
-            x=df_region["dataDate"],
-            y=df_region["maxt"],
+            x=df_loc["dataDate"],
+            y=df_loc["maxt"],
             mode='lines+markers',
             name='最高溫 MaxT (°C)',
             line=dict(color='#eb4d4b', width=3),
@@ -178,8 +148,8 @@ with col_left:
         
         # MinT Line
         fig.add_trace(go.Scatter(
-            x=df_region["dataDate"],
-            y=df_region["mint"],
+            x=df_loc["dataDate"],
+            y=df_loc["mint"],
             mode='lines+markers',
             name='最低溫 MinT (°C)',
             line=dict(color='#0984e3', width=3),
@@ -187,7 +157,7 @@ with col_left:
         ))
         
         fig.update_layout(
-            xaxis_title="預報日期 (Date)",
+            xaxis_title="預報時間 (Date / Time)",
             yaxis_title="氣溫 (°C)",
             hovermode="x unified",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -199,20 +169,41 @@ with col_left:
         st.plotly_chart(fig, use_container_width=True)
         
         # Step 15: Display Data Table
-        st.subheader("📋 氣溫數據表格 (Data Table)")
-        df_display = df_region[["dataDate", "mint", "maxt"]].rename(
-            columns={"dataDate": "預報日期 Date", "mint": "最低溫 MinT (°C)", "maxt": "最高溫 MaxT (°C)"}
+        st.subheader("📋 數據表格 (Data Table)")
+        df_display = df_loc[["dataDate", "mint", "maxt"]].rename(
+            columns={"dataDate": "日期 Date", "mint": "最低溫 MinT (°C)", "maxt": "最高溫 MaxT (°C)"}
         )
         st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
-        st.warning("查無該地區的氣溫資料。")
+        st.warning(f"查無 {selected_location} 的氣溫資料。")
 
 with col_right:
-    st.subheader(f"🗺️ 台灣氣溫分區地圖 ({selected_date_str})")
+    st.subheader(f"🗺️ 全台 22 縣市地圖 ({selected_date_str})")
     
-    # Step 17 & 18: Folium Map Visualization
-    # Region Coordinates mapping (Latitude, Longitude)
+    # Step 17 & 18: Folium Map Visualization for ALL 22 Taiwan Counties
     region_coords = {
+        "臺北市": (25.0330, 121.5654),
+        "新北市": (24.9157, 121.6739),
+        "基隆市": (25.1283, 121.7419),
+        "桃園市": (24.9936, 121.3010),
+        "新竹市": (24.8138, 120.9675),
+        "新竹縣": (24.7033, 121.1444),
+        "苗栗縣": (24.5601, 120.8217),
+        "臺中市": (24.1477, 120.6736),
+        "彰化縣": (24.0518, 120.5161),
+        "南投縣": (23.9610, 120.9719),
+        "雲林縣": (23.7092, 120.4313),
+        "嘉義市": (23.4801, 120.4491),
+        "嘉義縣": (23.4588, 120.5740),
+        "臺南市": (22.9997, 120.2270),
+        "高雄市": (22.6273, 120.3014),
+        "屏東縣": (22.5520, 120.5487),
+        "宜蘭縣": (24.7570, 121.7530),
+        "花蓮縣": (23.9872, 121.6015),
+        "臺東縣": (22.7583, 121.1444),
+        "澎湖縣": (23.5711, 119.5793),
+        "金門縣": (24.4493, 118.3766),
+        "連江縣": (26.1505, 119.9499),
         "北部地區": (25.0330, 121.5654),
         "中部地區": (24.1477, 120.6736),
         "南部地區": (22.6273, 120.3014),
@@ -258,19 +249,19 @@ with col_right:
             
             folium.CircleMarker(
                 location=coords,
-                radius=18,
+                radius=14,
                 popup=folium.Popup(popup_html, max_width=200),
-                tooltip=f"{rname}: Min {mint}°C / Max {maxt}°C",
+                tooltip=f"{rname}: {mint}°C ~ {maxt}°C",
                 color=color,
                 fill=True,
                 fill_color=color,
-                fill_opacity=0.75,
+                fill_opacity=0.8,
             ).add_to(m)
     
     # Display Streamlit-Folium Component
     st_folium(m, width=500, height=450)
     
-    # Temperature Legend Chips (Step 17)
+    # Temperature Legend Chips
     st.markdown("""
     <div style="margin-top: 10px; text-align: center;">
         <span class="legend-chip" style="background:#d6eaf8; color:#1b4f72;">🔵 &lt; 20°C</span>
@@ -280,6 +271,6 @@ with col_right:
     </div>
     """, unsafe_allow_html=True)
 
-# Footer (Step 23 & 24)
+# Footer
 st.markdown("---")
-st.markdown("<p style='text-align: center; color: #7f8c8d;'>Code Smarter, Build a Better Tomorrow! | AI x Data x Streamlit 專案作品</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #7f8c8d;'>Code Smarter, Build a Better Tomorrow! | 全台 22 縣市 CWA 氣象預報儀表板</p>", unsafe_allow_html=True)
